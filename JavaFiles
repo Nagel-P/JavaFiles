@@ -839,3 +839,740 @@ Se eu tivesse que resumir toda a disciplina em apenas 10 tópicos, seriam:
 10. **RabbitMQ** → comunicação assíncrona entre sistemas.
 
 Esses são os conceitos que servem de base para praticamente qualquer aplicação Java moderna usando APIs, microsserviços e integração entre sistemas.
+
+
+Ótimo. Para uma prova, entrevista ou projeto real, decorar definições não é suficiente. O importante é entender **o que cada camada faz, quando ela é usada e o fluxo completo dos dados**.
+
+Vou aprofundar os conceitos que considero mais importantes da disciplina com exemplos próximos do que você implementaria em uma API real.
+
+---
+
+# 1. Interfaces na prática
+
+Imagine que você precisa integrar diferentes formas de pagamento.
+
+Sem interface:
+
+```java
+public class CartaoCredito {
+    public void pagar(double valor) {
+        System.out.println("Pago no crédito");
+    }
+}
+```
+
+O problema:
+
+```java
+CartaoCredito cartao = new CartaoCredito();
+cartao.pagar(100);
+```
+
+Se amanhã surgir PIX, boleto ou PayPal, você terá que alterar o sistema inteiro.
+
+---
+
+## Com Interface
+
+```java
+public interface MetodoPagamento {
+    void pagar(double valor);
+}
+```
+
+Implementações:
+
+```java
+public class Pix implements MetodoPagamento {
+
+    @Override
+    public void pagar(double valor) {
+        System.out.println("Pagamento PIX: " + valor);
+    }
+}
+```
+
+```java
+public class CartaoCredito implements MetodoPagamento {
+
+    @Override
+    public void pagar(double valor) {
+        System.out.println("Pagamento crédito: " + valor);
+    }
+}
+```
+
+Uso:
+
+```java
+MetodoPagamento pagamento = new Pix();
+
+pagamento.pagar(100);
+```
+
+Observe:
+
+O sistema sabe apenas que existe um método:
+
+```java
+pagar()
+```
+
+Não importa quem implementa.
+
+Isso é o fundamento de:
+
+* APIs
+* Spring
+* Repository Pattern
+* Injeção de Dependência
+
+---
+
+# 2. Exceções na arquitetura de APIs
+
+Suponha que o usuário tente cadastrar um produto sem nome.
+
+---
+
+Errado:
+
+```java
+public Produto criarProduto(Produto produto) {
+
+    if(produto.getNome() == null) {
+        System.out.println("Erro");
+        return null;
+    }
+
+    return produto;
+}
+```
+
+Problemas:
+
+* Retorna null
+* Difícil descobrir o erro
+* Código pouco profissional
+
+---
+
+Correto:
+
+```java
+public Produto criarProduto(Produto produto)
+throws Exception {
+
+    if(produto.getNome() == null ||
+       produto.getNome().isEmpty()) {
+
+        throw new Exception("Nome obrigatório");
+    }
+
+    return produto;
+}
+```
+
+---
+
+Quem chamou trata:
+
+```java
+try {
+
+    Produto produto =
+        service.criarProduto(p);
+
+} catch(Exception e) {
+
+    System.out.println(e.getMessage());
+
+}
+```
+
+---
+
+Em APIs reais:
+
+```java
+catch(Exception e) {
+
+    exchange.sendResponseHeaders(400, -1);
+
+}
+```
+
+O erro vira uma resposta HTTP.
+
+---
+
+# 3. MVC e a evolução para APIs
+
+Na aula vocês viram:
+
+```text
+View
+ ↓
+Controller
+ ↓
+Model
+```
+
+Exemplo:
+
+```java
+controller.adicionarProduto(...)
+```
+
+---
+
+Mas APIs normalmente evoluem para:
+
+```text
+Handler/Controller
+         ↓
+Service
+         ↓
+Repository
+         ↓
+Banco
+```
+
+---
+
+# 4. Entendendo o Service
+
+O Service é onde ficam as regras de negócio.
+
+Exemplo:
+
+```java
+public class ProdutoService {
+
+    public Produto criarProduto(Produto p)
+    throws Exception {
+
+        if(p.getPreco() <= 0) {
+            throw new Exception(
+                "Preço inválido"
+            );
+        }
+
+        return p;
+    }
+}
+```
+
+Pergunta clássica de prova:
+
+**Onde ficam as validações?**
+
+Resposta:
+
+```text
+Service
+```
+
+---
+
+Não no Repository.
+
+Não no Controller.
+
+---
+
+# 5. Repository
+
+O Repository só conversa com o banco.
+
+Exemplo:
+
+```java
+public class ProdutoRepository {
+
+    public void salvar(Produto produto)
+    throws Exception {
+
+        String sql =
+            "INSERT INTO produto(nome, preco) VALUES (?, ?)";
+
+        Connection conn =
+            ConnectionFactory.getConnection();
+
+        PreparedStatement stmt =
+            conn.prepareStatement(sql);
+
+        stmt.setString(1, produto.getNome());
+        stmt.setDouble(2, produto.getPreco());
+
+        stmt.execute();
+
+        conn.close();
+    }
+}
+```
+
+Observe:
+
+Não existe validação aqui.
+
+Ele apenas executa SQL.
+
+---
+
+# 6. Fluxo completo de um POST
+
+Quando alguém envia:
+
+```http
+POST /produtos
+```
+
+Com:
+
+```json
+{
+  "nome":"Notebook",
+  "preco":3500
+}
+```
+
+Acontece:
+
+```text
+Cliente
+ ↓
+Handler
+ ↓
+JSON -> Produto
+ ↓
+Service
+ ↓
+Repository
+ ↓
+Banco
+ ↓
+Repository
+ ↓
+Service
+ ↓
+Produto -> JSON
+ ↓
+Cliente
+```
+
+Essa visão costuma cair bastante.
+
+---
+
+# 7. Jackson (JSON)
+
+Esse é provavelmente o conteúdo mais usado no mercado.
+
+---
+
+Classe Java:
+
+```java
+public class Produto {
+
+    private String nome;
+    private double preco;
+
+    public Produto() {
+    }
+
+    public String getNome() {
+        return nome;
+    }
+
+    public void setNome(String nome) {
+        this.nome = nome;
+    }
+}
+```
+
+---
+
+## Serialização
+
+Objeto → JSON
+
+```java
+Produto produto =
+    new Produto();
+
+produto.setNome("Notebook");
+
+ObjectMapper mapper =
+    new ObjectMapper();
+
+String json =
+    mapper.writeValueAsString(produto);
+```
+
+Resultado:
+
+```json
+{
+  "nome":"Notebook"
+}
+```
+
+---
+
+## Desserialização
+
+JSON → Objeto
+
+```java
+String json =
+"""
+{
+  "nome":"Notebook"
+}
+""";
+```
+
+```java
+Produto produto =
+    mapper.readValue(
+        json,
+        Produto.class
+    );
+```
+
+Agora:
+
+```java
+produto.getNome();
+```
+
+retorna:
+
+```text
+Notebook
+```
+
+---
+
+# 8. HttpServer
+
+Ele funciona como um mini Spring Boot.
+
+Criação:
+
+```java
+HttpServer server =
+    HttpServer.create(
+        new InetSocketAddress(8000),
+        0
+    );
+```
+
+---
+
+Criando rota:
+
+```java
+server.createContext(
+    "/produtos",
+    new ProdutoHandler()
+);
+```
+
+Quando acessar:
+
+```http
+GET /produtos
+```
+
+O Java chama:
+
+```java
+ProdutoHandler.handle()
+```
+
+automaticamente.
+
+---
+
+# 9. Entendendo HttpExchange
+
+Essa é uma das classes mais importantes do curso.
+
+Ela representa a requisição HTTP.
+
+---
+
+Método:
+
+```java
+String metodo =
+    exchange.getRequestMethod();
+```
+
+Retorna:
+
+```text
+GET
+POST
+PUT
+DELETE
+```
+
+---
+
+URL:
+
+```java
+exchange.getRequestURI();
+```
+
+Exemplo:
+
+```text
+/produtos/10
+```
+
+---
+
+Corpo:
+
+```java
+exchange.getRequestBody();
+```
+
+Exemplo:
+
+```json
+{
+  "nome":"Mouse"
+}
+```
+
+---
+
+Resposta:
+
+```java
+exchange.sendResponseHeaders(
+    200,
+    resposta.length()
+);
+```
+
+---
+
+# 10. Consumo de API Externa
+
+Suponha que sua API precise consultar CEP.
+
+---
+
+Primeiro cria o cliente:
+
+```java
+HttpClient client =
+    HttpClient.newHttpClient();
+```
+
+---
+
+Cria requisição:
+
+```java
+HttpRequest request =
+    HttpRequest.newBuilder()
+        .uri(
+            URI.create(
+                "https://viacep.com.br/ws/80010010/json/"
+            )
+        )
+        .GET()
+        .build();
+```
+
+---
+
+Executa:
+
+```java
+HttpResponse<String> response =
+    client.send(
+        request,
+        HttpResponse.BodyHandlers.ofString()
+    );
+```
+
+---
+
+Obtém JSON:
+
+```java
+response.body();
+```
+
+Resultado:
+
+```json
+{
+  "logradouro":"Rua Marechal Deodoro"
+}
+```
+
+---
+
+# 11. Service de Integração
+
+Esse conceito é extremamente importante.
+
+Você não coloca integração dentro do Handler.
+
+Cria um Service.
+
+Exemplo:
+
+```java
+public class CepService {
+
+    public Endereco buscarCep(String cep)
+    throws Exception {
+
+        // chamada HTTP
+
+        // conversão JSON
+
+        // retorno objeto
+
+    }
+}
+```
+
+Depois:
+
+```java
+Endereco endereco =
+    cepService.buscarCep("80010010");
+```
+
+Isso mantém o código organizado.
+
+---
+
+# 12. RabbitMQ na prática
+
+Imagine um e-commerce.
+
+Quando o pedido é criado:
+
+```java
+POST /pedido
+```
+
+Sem RabbitMQ:
+
+```text
+Salvar pedido
+Enviar e-mail
+Atualizar estoque
+Gerar nota
+```
+
+Tudo dentro da mesma requisição.
+
+---
+
+Com RabbitMQ:
+
+```text
+Salvar pedido
+Enviar mensagem
+Retornar 200 OK
+```
+
+---
+
+Producer:
+
+```java
+channel.basicPublish(
+    "",
+    "fila-pedidos",
+    null,
+    mensagem.getBytes()
+);
+```
+
+Aqui a mensagem vai para a fila.
+
+---
+
+Consumer:
+
+```java
+channel.basicConsume(
+    QUEUE,
+    true,
+    callback,
+    consumerTag -> {}
+);
+```
+
+O Consumer fica escutando.
+
+Quando chegar:
+
+```text
+Pedido criado
+```
+
+ele processa.
+
+---
+
+# O fluxo completo da disciplina
+
+Se eu resumisse tudo em um único diagrama:
+
+```text
+Cliente
+   ↓ HTTP
+
+Handler/Controller
+   ↓
+
+ObjectMapper
+(JSON → Objeto)
+
+   ↓
+
+Service
+(Regras de negócio)
+
+   ↓
+
+Repository
+(SQL/JDBC)
+
+   ↓
+
+Banco de Dados
+
+--------------------
+
+API Externa
+(ViaCEP, Clima)
+
+   ↑
+HttpClient
+
+--------------------
+
+RabbitMQ
+(Filas)
+
+Producer → Queue → Consumer
+```
+
+Se você dominar esse fluxo e conseguir explicar o papel de **Handler, Service, Repository, ObjectMapper, HttpClient, JDBC e RabbitMQ**, já estará entendendo praticamente toda a arquitetura ensinada nessas aulas.
