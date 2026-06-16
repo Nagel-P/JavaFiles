@@ -1,0 +1,841 @@
+# Resumo Estratégico – Integração de APIs em Java
+
+Se o objetivo é revisar rapidamente o que realmente importa para construir sistemas integrados em Java, o conteúdo das aulas pode ser resumido em uma evolução natural:
+
+**Java Básico → MVC → APIs → JSON → Banco de Dados → Consumo de APIs Externas → Microsserviços → Mensageria**
+
+---
+
+# 1. Interfaces e Exceções (Fundação)
+
+## Interfaces = Contratos
+
+A principal ideia é desacoplar implementação de comportamento.
+
+Em vez de programar para uma classe específica:
+
+```java
+CartaoCredito cartao = new CartaoCredito();
+```
+
+programamos para a interface:
+
+```java
+MetodoPagamento pagamento = new CartaoCredito();
+```
+
+Isso permite trocar implementações sem alterar o restante do sistema.
+
+### Uso prático em APIs
+
+Muito comum em:
+
+* Services
+* Repositories
+* Gateways de pagamento
+* Clientes de APIs externas
+
+Exemplo:
+
+```java
+public interface CepService {
+    Endereco buscar(String cep);
+}
+```
+
+Depois pode existir:
+
+```java
+ViaCepService
+CorreiosService
+MockCepService
+```
+
+todos implementando o mesmo contrato.
+
+---
+
+## Exceções
+
+O ponto importante não é o `try-catch`, mas sim a **propagação controlada de erros**.
+
+Exemplo:
+
+```java
+public Produto criarProduto(Produto p) throws Exception
+```
+
+A camada superior decide o que fazer quando ocorrer erro.
+
+Fluxo típico:
+
+```text
+Repository
+   ↓
+Service
+   ↓
+Controller/Handler
+   ↓
+Resposta HTTP
+```
+
+Se algo falhar:
+
+```java
+throw new Exception("Produto inválido");
+```
+
+o Handler transforma isso em:
+
+```http
+400 Bad Request
+```
+
+ou
+
+```http
+500 Internal Server Error
+```
+
+---
+
+# 2. MVC (Separação de Responsabilidades)
+
+MVC foi a primeira arquitetura apresentada.
+
+## Model
+
+Contém:
+
+* Dados
+* Regras de negócio
+
+Exemplo:
+
+```java
+Produto
+Conta
+Usuario
+```
+
+---
+
+## View
+
+Responsável apenas pela apresentação.
+
+Exemplo:
+
+```java
+ProdutoView
+```
+
+Não deve conter regras de negócio.
+
+---
+
+## Controller
+
+Recebe ações e coordena o sistema.
+
+Exemplo:
+
+```java
+ProdutoController
+```
+
+---
+
+## O conceito realmente importante
+
+Separação de responsabilidades.
+
+Em APIs modernas a View praticamente desaparece e surge:
+
+```text
+Controller
+ ↓
+Service
+ ↓
+Repository
+ ↓
+Banco
+```
+
+---
+
+# 3. Microsserviços
+
+## O que é
+
+Um sistema dividido em serviços independentes.
+
+Exemplo:
+
+```text
+Produto Service
+Pedido Service
+Cliente Service
+Pagamento Service
+```
+
+Cada um possui:
+
+* código próprio
+* API própria
+* banco próprio
+
+---
+
+## Vantagens
+
+### Escalabilidade
+
+Se pedidos recebe muito acesso:
+
+```text
+3 instâncias Pedido
+1 instância Produto
+```
+
+---
+
+### Manutenção isolada
+
+Alterar Produto não exige publicar todo o sistema.
+
+---
+
+## Comunicação
+
+Normalmente por:
+
+```text
+HTTP
+REST
+JSON
+Mensageria
+```
+
+---
+
+# 4. HttpServer
+
+Foi usado para mostrar que é possível criar APIs sem frameworks.
+
+Classe:
+
+```java
+com.sun.net.httpserver.HttpServer
+```
+
+Fluxo:
+
+```java
+HttpServer server = HttpServer.create(...);
+
+server.createContext(
+    "/produtos",
+    new ProdutoHandler()
+);
+```
+
+O Handler funciona como um Controller.
+
+---
+
+## Conceito importante
+
+Quando uma requisição chega:
+
+```http
+GET /produtos
+```
+
+o Java executa:
+
+```java
+ProdutoHandler.handle()
+```
+
+Esse método é o ponto de entrada da API.
+
+---
+
+# 5. APIs REST
+
+Provavelmente o conteúdo mais importante da disciplina.
+
+## REST
+
+Expor recursos através de URLs.
+
+Exemplo:
+
+```http
+GET /produtos
+POST /produtos
+GET /produtos/1
+DELETE /produtos/1
+```
+
+---
+
+## Métodos HTTP
+
+### GET
+
+Buscar dados
+
+```http
+GET /produtos
+```
+
+---
+
+### POST
+
+Criar dados
+
+```http
+POST /produtos
+```
+
+---
+
+### PUT
+
+Atualizar dados
+
+```http
+PUT /produtos/1
+```
+
+---
+
+### DELETE
+
+Remover dados
+
+```http
+DELETE /produtos/1
+```
+
+---
+
+## Endpoint
+
+É a combinação:
+
+```text
+URL + Método HTTP
+```
+
+Exemplo:
+
+```http
+GET /produtos
+```
+
+é um endpoint.
+
+---
+
+# 6. JSON (A Ponte Entre Sistemas)
+
+Se existe um conceito que aparece em praticamente todas as aulas é:
+
+## JSON é a linguagem universal das APIs
+
+Exemplo:
+
+```json
+{
+  "id": "1",
+  "nome": "Notebook",
+  "preco": 3500
+}
+```
+
+---
+
+## Serialização
+
+Objeto Java → JSON
+
+```java
+mapper.writeValueAsString(produto);
+```
+
+---
+
+## Desserialização
+
+JSON → Objeto Java
+
+```java
+mapper.readValue(json, Produto.class);
+```
+
+---
+
+## Biblioteca principal
+
+Jackson
+
+```java
+ObjectMapper
+```
+
+Praticamente toda API Java usa algo baseado nela.
+
+---
+
+## Requisitos da classe
+
+Para Jackson funcionar:
+
+```java
+public Produto() {}
+```
+
+e
+
+```java
+getters/setters
+```
+
+---
+
+# 7. Arquitetura Real de APIs
+
+A partir das aulas seguintes surgiu uma arquitetura mais profissional.
+
+## Estrutura
+
+```text
+Controller/Handler
+      ↓
+Service
+      ↓
+Repository
+      ↓
+Banco de Dados
+```
+
+---
+
+## Handler
+
+Recebe HTTP.
+
+```java
+GET
+POST
+DELETE
+PUT
+```
+
+---
+
+## Service
+
+Contém regras de negócio.
+
+Exemplo:
+
+```java
+if(nome.isEmpty())
+```
+
+```java
+throw new Exception(...)
+```
+
+Validações ficam aqui.
+
+---
+
+## Repository
+
+Responsável exclusivamente pelo banco.
+
+Exemplo:
+
+```java
+salvar()
+listar()
+buscarPorId()
+```
+
+---
+
+## Grande vantagem
+
+Se trocar:
+
+```text
+MySQL
+↓
+PostgreSQL
+```
+
+a regra de negócio continua igual.
+
+---
+
+# 8. JDBC
+
+JDBC é a camada que conecta Java ao banco.
+
+Principais componentes:
+
+## Connection
+
+Conexão com banco.
+
+```java
+Connection conn
+```
+
+---
+
+## PreparedStatement
+
+Executa SQL com segurança.
+
+```java
+PreparedStatement stmt
+```
+
+Evita SQL Injection.
+
+---
+
+## ResultSet
+
+Representa resultados do SELECT.
+
+```java
+while(rs.next())
+```
+
+---
+
+## Fluxo
+
+```text
+Java
+ ↓
+JDBC
+ ↓
+Banco de Dados
+```
+
+---
+
+# 9. Consumo de APIs Externas
+
+Aqui começa a verdadeira integração de sistemas.
+
+Antes:
+
+```text
+Cliente
+ ↓
+Nossa API
+ ↓
+Banco
+```
+
+Depois:
+
+```text
+Cliente
+ ↓
+Nossa API
+ ↓
+API Externa
+ ↓
+Nossa API
+ ↓
+Cliente
+```
+
+---
+
+## HttpClient
+
+Classe moderna do Java para chamadas HTTP.
+
+```java
+HttpClient client =
+    HttpClient.newHttpClient();
+```
+
+---
+
+## Requisição
+
+```java
+HttpRequest
+```
+
+---
+
+## Resposta
+
+```java
+HttpResponse
+```
+
+---
+
+## Fluxo
+
+```java
+request
+↓
+send()
+↓
+response
+```
+
+---
+
+# 10. ViaCEP
+
+Primeiro exemplo real.
+
+Consulta:
+
+```http
+https://viacep.com.br/ws/80010010/json/
+```
+
+Retorna:
+
+```json
+{
+  "logradouro":"Rua ..."
+}
+```
+
+---
+
+## Conceito importante
+
+Consumir API externa é:
+
+1. Fazer HTTP
+2. Receber JSON
+3. Converter para objeto Java
+
+---
+
+# 11. Geolocalização (PositionStack)
+
+Mostrou um caso mais avançado.
+
+Transformar:
+
+```text
+Curitiba
+```
+
+em:
+
+```text
+Latitude
+Longitude
+```
+
+---
+
+## Conceito novo
+
+API Key
+
+Identifica quem está consumindo a API.
+
+Exemplo:
+
+```text
+access_key=xxxxx
+```
+
+Quase todas APIs comerciais exigem isso.
+
+---
+
+# 12. Problemas Reais de Integração
+
+Sempre considerar:
+
+### Timeout
+
+API demora para responder.
+
+---
+
+### Indisponibilidade
+
+API externa caiu.
+
+---
+
+### JSON inválido
+
+Formato inesperado.
+
+---
+
+### Dados inválidos
+
+CEP inexistente.
+
+---
+
+Por isso integrações sempre precisam de:
+
+```java
+try/catch
+```
+
+e tratamento de erro adequado.
+
+---
+
+# 13. Mensageria e RabbitMQ
+
+Provavelmente o conceito arquitetural mais importante do final da disciplina.
+
+---
+
+## Comunicação Síncrona
+
+REST funciona assim:
+
+```text
+Cliente
+ ↓
+API
+ ↓
+Resposta
+```
+
+O cliente espera.
+
+---
+
+## Comunicação Assíncrona
+
+Mensageria funciona assim:
+
+```text
+Sistema A
+ ↓
+Fila
+ ↓
+Sistema B
+```
+
+O sistema continua trabalhando sem esperar.
+
+---
+
+## RabbitMQ
+
+Broker responsável por:
+
+* receber mensagens
+* armazenar
+* distribuir
+
+---
+
+## Componentes
+
+### Producer
+
+Envia mensagem.
+
+```java
+basicPublish()
+```
+
+---
+
+### Queue
+
+Fila.
+
+```java
+fila-pedidos
+```
+
+---
+
+### Consumer
+
+Recebe mensagem.
+
+```java
+basicConsume()
+```
+
+---
+
+## Caso real
+
+Ao criar um pedido:
+
+Sem fila:
+
+```text
+Criar pedido
+Enviar e-mail
+Atualizar estoque
+Gerar nota
+```
+
+Tudo na mesma requisição.
+
+---
+
+Com RabbitMQ:
+
+```text
+Criar pedido
+↓
+Enviar mensagem
+↓
+Fim da requisição
+```
+
+Outros sistemas processam depois.
+
+Resultado:
+
+* API mais rápida
+* Menor acoplamento
+* Melhor escalabilidade
+
+---
+
+# Resumo Final (o que mais cai e o que mais importa)
+
+Se eu tivesse que resumir toda a disciplina em apenas 10 tópicos, seriam:
+
+1. **Interfaces** → desacoplamento e contratos.
+2. **Exceções** → tratamento e propagação de erros.
+3. **MVC** → separação de responsabilidades.
+4. **REST** → recursos expostos por URLs.
+5. **HTTP Methods** → GET, POST, PUT, DELETE.
+6. **JSON** → formato padrão de troca de dados.
+7. **Jackson (ObjectMapper)** → serialização e desserialização.
+8. **Arquitetura Controller → Service → Repository** → padrão profissional de APIs.
+9. **HttpClient** → consumo de APIs externas.
+10. **RabbitMQ** → comunicação assíncrona entre sistemas.
+
+Esses são os conceitos que servem de base para praticamente qualquer aplicação Java moderna usando APIs, microsserviços e integração entre sistemas.
